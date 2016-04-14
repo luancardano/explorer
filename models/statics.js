@@ -11,6 +11,8 @@ var StaticsSchema = new Schema({
   //last_txs: { type: Array, default: [] },
   connections: { type: Number, default: 0 },
   last_price: { type: Number, default: 0 },
+  //last_block: {height: {type:Number}, hash: {type:String}},
+  lasthash: { type: String },
 });
 
 module.exports = mongoose.model('Statics', StaticsSchema);

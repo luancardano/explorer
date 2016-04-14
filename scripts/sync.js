@@ -202,68 +202,9 @@ is_locked(function (exists) {
                     });
                   }
                   else if (mode == 'findError'){
-                	  console.log('find an error');
-                	  console.log('last block:', stats.count);          	   
-                	  
-                	  var lastcount = 28;
-            		  lib.get_blockhash(lastcount, function(blockhash) {
-            			  var current = blockhash;
-            			  
-            			  lib.syncLoop(6, function (loop) {
-            			  //for(var i = 1; i <= 6 ; i++){
-            				  var x = loop.iteration();
-            				  //console.log('current block: ', current);
-            				  lib.get_block(current, function(block) {
-                				  if(block){
-                					  //console.log('block: ',block.previousblockhash , ' prev:', block);
-                					  Block.findOne({blockhash:block.previousblockhash}, function(err,result){
-                						  console.log('findone: ', result);
-                						  if(result){
-                							  if(result.block_number == 2){
-                    							  //do normal update
-                    							  console.log("blockchain is valid");
-                    							  
-                    							  db.update_tx_db(settings.coin, result.height+1, lastcount, settings.update_timeout, function(){
-                    			                      db.update_richlist('received', function(){
-                    			                        db.update_richlist('balance', function(){
-                    			                          db.get_stats(settings.coin, function(nstats){
-                    			                            //console.log('update complete (block: %s)', nstats.last);
-                    			                            exit();
-                    			                          });
-                    			                        });
-                    			                      });
-                    			                    });
-                    							  
-                    							  loop.break(function(end){});                    							  
-                    							  //exit();
-                    						  }
-                    						  else if(result.block_number == 1){
-                    							  // error =>remove all transactions related to error block and
-                    							  //re-update from height to newest block      
-                    							  
-                    							  console.log("blockchain is invalid");
-                    						  }
-                						  }               						    
-                							  
-                					  });
-                					  console.log('current hash:', block.previousblockhash);
-                					  current = block.previousblockhash;
-                				  }
-                				   setTimeout(function() {
-                					   loop.next();             					   
-                				   	
-                				   }, 10);
-                			  	
-                			  });
-            				  //console.log('test ',blockhash);   
-            				  
-            			  });    
-            			  //exit();
-                	  });
-            		  setTimeout(function() {   					                					   
-         				   	
- 				   		}, 10);
-                	  
+                	  //console.log('find an error');
+                	  //console.log('last block:', stats.count);          	   
+                	  doUpdate(stats);
                   }
                 });
               });
@@ -306,3 +247,126 @@ is_locked(function (exists) {
     });
   }
 });
+
+
+function doUpdate(stats){
+	var savedBlocksLength = 6;
+	  var tmpLast = stats.last;
+	  var tmpLastHash = stats.lasthash;
+	  lib.get_blockhash(tmpLast, function(lastHash_BlockChain){
+		  
+  	  if(true){//typeof lastHash_BlockChain === 'string'){
+  		  if(lastHash_BlockChain == tmpLastHash){
+  			  console.log(tmpLastHash);
+  			  console.log(lastHash_BlockChain);
+  			  console.log('update from last to newest block');
+  			  
+  			  
+  			  db.update_tx_db(settings.coin, stats.last+1, stats.count, settings.update_timeout, function(){
+                    db.update_richlist('received', function(){
+                      db.update_richlist('balance', function(){
+                        db.get_stats(settings.coin, function(nstats){
+                          console.log('update complete (block: %s)', nstats.last);
+                          exit();
+                        });
+                      });
+                    });
+                  });  
+  			  
+  		  }
+  		  else{ // error=> find error position and remove them from 6 last blocks, re-update from that position			
+  			  
+  			  //find block position which is not hacked
+  			  // Variable: tmpLast: store this position
+  			  lib.syncLoop(savedBlocksLength-1, function (loop) {
+  				  tmpLast--;
+  				  console.log('test tmplast is: ',tmpLast);
+                    var i = loop.iteration();
+                    lib.get_blockhash(tmpLast, function(newlastHash_BlockChain){
+                  	  if(typeof newlastHash_BlockChain === 'string'){
+                  		  
+              			  Block.findOne({height:tmpLast}, function(err, blockResult){
+              				  if(blockResult){
+              					  console.log(blockResult.blockhash);
+              					  console.log(newlastHash_BlockChain);
+              					  if(blockResult.blockhash == newlastHash_BlockChain){ // if find a right block=>stop
+              						  console.log('blockchain is hacked');
+              						  console.log('hacked block is: ',tmpLast);
+              						  //console.log(newlastHash_BlockChain);    
+              						  loop.break(true);   		  
+              					  }  
+              					  else{      
+              						  setTimeout(function(){  
+              							  //console.log('test delay: ' ,i)
+              							  loop.next();
+              						  },10);                                						 
+              					  }
+              				  }
+              				  else{
+              					  console.log('error for get last block in blockchain');
+              					  exit();                                					  				  
+              				}                       					  
+              					  
+              			  });	  
+                  	  }
+                  	  else{
+                  		  console.log('error for get block hash');
+                  		  exit();
+                  	  }
+                    });
+                   // loop.next();
+          	  });
+  			  
+  			  // after detecting hack => do fix database
+  			  setTimeout(function(){
+  				
+      			  lib.syncLoop(stats.last - tmpLast, function(loop){
+      				  var ii = loop.iteration();
+      				  console.log('test ii:',ii,' tmp lastr ',tmpLast);
+      				  Block.findOne({height: tmpLast+ii+1}, function(err,errBlk){
+      					  if(errBlk){
+      						  //console.log('error block', errBlk);   
+      						  //update transaction and address
+              				  db.updateErrorInfo(errBlk, function(){
+              					//remove this block
+              					  
+                  				  Block.remove({height: tmpLast+ii+1},function(){
+                  					  //update from wrong block position
+                  					stats.last = tmpLast+1;//update last block need to rerun
+                    				  db.update_tx_db(settings.coin, stats.last, stats.count, settings.update_timeout, function(){
+                                          db.update_richlist('received', function(){
+                                            db.update_richlist('balance', function(){
+                                              db.get_stats(settings.coin, function(nstats){
+                                                console.log('update complete (block: %s)', nstats.last);
+                                                exit();
+                                              });
+                                            });
+                                          });
+                                        });
+                  				  });
+                  				  //exit();
+              				  });                            					
+      					  }
+      					  else{
+      						  console.log('error block');   
+      						  exit();
+      					  }
+      				  });   
+      				  //Block.findOneAndRemove({height:tmpLast+ii+1}, function(){ 
+      				  setTimeout(function(){
+      					  loop.next();
+      				  },10);
+      				  //loop.next();       				 
+      			  });
+      			  
+  			  },200);
+  			  //setTimeout(function(){exit();},300);
+  			  //exit();                    			  
+  		  }                  		  
+  	  }
+  	  else{
+  		  console.log('error: not a string');
+  		  exit();
+  	  }
+	  });
+}

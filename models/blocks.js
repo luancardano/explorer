@@ -7,8 +7,10 @@ var mongoose = require('mongoose')
 var BlocksSchema = new Schema({
   blockhash: { type: String, unique: true, index: true},
   prev_block: { type: String},
-  block_number:{type:Number},
+  //block_number:{type:Number},
+  txs: { type: Array, default: [] },
   height:{type:Number},
+
 }, {id: false});
 
 module.exports = mongoose.model('Block', BlocksSchema);
