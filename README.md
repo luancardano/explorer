@@ -1,6 +1,10 @@
 Iquidus Explorer - 1.6.1
 ================
+<<<<<<< HEAD
 //test
+=======
+//test 3
+>>>>>>> newbranch
 An open source block explorer written in node.js.
 
 ### See it in action
